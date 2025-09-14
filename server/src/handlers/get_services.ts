@@ -1,4 +1,7 @@
+import { db } from '../db';
+import { servicesTable } from '../db/schema';
 import { type Service } from '../schema';
+import { eq, asc } from 'drizzle-orm';
 
 /**
  * Retrieves all available services for the booking wizard.
@@ -13,13 +16,31 @@ export async function getServices(filters?: {
     visible_only?: boolean;
     language?: 'ar' | 'en';
 }): Promise<Service[]> {
-    // This is a placeholder implementation! Real code should be implemented here.
-    // The actual implementation will:
-    // - Query services table with visibility filter
-    // - Order by the 'order' field for proper display sequence
-    // - Include both Arabic and English content
-    // - Convert numeric prices from database strings to numbers
-    // - Cache results for performance
-    
-    return []; // Placeholder empty array
+    try {
+        // Build the complete query based on filters
+        let results;
+
+        if (filters?.visible_only === true) {
+            results = await db.select()
+                .from(servicesTable)
+                .where(eq(servicesTable.visible, true))
+                .orderBy(asc(servicesTable.order), asc(servicesTable.id))
+                .execute();
+        } else {
+            results = await db.select()
+                .from(servicesTable)
+                .orderBy(asc(servicesTable.order), asc(servicesTable.id))
+                .execute();
+        }
+
+        // Convert numeric fields from database strings to numbers
+        return results.map(service => ({
+            ...service,
+            base_price_team: parseFloat(service.base_price_team),
+            base_price_solo: parseFloat(service.base_price_solo)
+        }));
+    } catch (error) {
+        console.error('Failed to retrieve services:', error);
+        throw error;
+    }
 }

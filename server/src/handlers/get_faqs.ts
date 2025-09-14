@@ -1,4 +1,7 @@
+import { db } from '../db';
+import { faqsTable } from '../db/schema';
 import { type FAQ } from '../schema';
+import { eq, asc, and, sql, type SQL } from 'drizzle-orm';
 
 /**
  * Retrieves FAQ items for display and management.
@@ -9,18 +12,50 @@ import { type FAQ } from '../schema';
  * - Tag-based filtering
  * - Localized questions and answers
  */
-export async function getFAQs(filters?: {
-    visible_only?: boolean;
-    tags?: string[];
-    language?: 'ar' | 'en';
-}): Promise<FAQ[]> {
-    // This is a placeholder implementation! Real code should be implemented here.
-    // The actual implementation will:
-    // - Query faqs table with visibility filter
-    // - Filter by tags if specified
-    // - Order by the 'order' field for proper sequence
-    // - Include both Arabic and English Q&A
-    // - Support tag-based categorization
+export const getFAQs = async (filters?: {
+  visible_only?: boolean;
+  tags?: string[];
+  language?: 'ar' | 'en';
+}): Promise<FAQ[]> => {
+  try {
+    // Build conditions array
+    const conditions: SQL<unknown>[] = [];
+
+    // Filter by visibility if specified
+    if (filters?.visible_only) {
+      conditions.push(eq(faqsTable.visible, true));
+    }
+
+    // Filter by tags if specified
+    if (filters?.tags && filters.tags.length > 0) {
+      // Use PostgreSQL's json ? operator to check if tags array contains any of the specified tags
+      const tagConditions = filters.tags.map(tag => 
+        sql`${faqsTable.tags}::jsonb ? ${tag}`
+      );
+      // Use OR logic for tags - match any of the specified tags
+      conditions.push(sql`(${sql.join(tagConditions, sql` OR `)})`);
+    }
+
+    // Build the complete query step by step
+    const baseQuery = db.select().from(faqsTable);
     
-    return []; // Placeholder empty array
-}
+    const queryWithConditions = conditions.length > 0 
+      ? baseQuery.where(conditions.length === 1 ? conditions[0] : and(...conditions))
+      : baseQuery;
+
+    // Apply ordering and execute
+    const results = await queryWithConditions
+      .orderBy(asc(faqsTable.order), asc(faqsTable.id))
+      .execute();
+
+    // Convert results to match schema types (no numeric conversions needed for FAQ)
+    return results.map(faq => ({
+      ...faq,
+      // Ensure tags is properly typed as string array
+      tags: Array.isArray(faq.tags) ? faq.tags : []
+    }));
+  } catch (error) {
+    console.error('FAQ retrieval failed:', error);
+    throw error;
+  }
+};

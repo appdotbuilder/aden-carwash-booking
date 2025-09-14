@@ -1,4 +1,7 @@
+import { db } from '../db';
+import { addonsTable } from '../db/schema';
 import { type Addon } from '../schema';
+import { eq, asc, SQL } from 'drizzle-orm';
 
 /**
  * Retrieves all available add-on services.
@@ -8,17 +11,27 @@ import { type Addon } from '../schema';
  * - Proper ordering for display
  * - Localized content for Arabic/English
  */
-export async function getAddons(filters?: {
-    visible_only?: boolean;
-    language?: 'ar' | 'en';
-}): Promise<Addon[]> {
-    // This is a placeholder implementation! Real code should be implemented here.
-    // The actual implementation will:
-    // - Query addons table with visibility filter
-    // - Order by the 'order' field for proper display
-    // - Include localized names and descriptions
-    // - Convert price from database numeric to number type
-    // - Cache results for booking wizard performance
+export const getAddons = async (filters?: {
+  visible_only?: boolean;
+  language?: 'ar' | 'en';
+}): Promise<Addon[]> => {
+  try {
+    // Build query with conditional filtering
+    const baseQuery = db.select().from(addonsTable);
     
-    return []; // Placeholder empty array
-}
+    const finalQuery = filters?.visible_only !== false
+      ? baseQuery.where(eq(addonsTable.visible, true)).orderBy(asc(addonsTable.order))
+      : baseQuery.orderBy(asc(addonsTable.order));
+
+    const results = await finalQuery.execute();
+
+    // Convert numeric fields back to numbers
+    return results.map(addon => ({
+      ...addon,
+      price: parseFloat(addon.price)
+    }));
+  } catch (error) {
+    console.error('Get addons failed:', error);
+    throw error;
+  }
+};
